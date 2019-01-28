@@ -87,6 +87,7 @@ nil: Vx = Vy SHR/SHL 1"
 (defvar chip8-ram nil)
 (defvar chip8-stack nil)
 (defvar chip8-fb nil)
+(defvar chip8-fb-dirty nil)
 (defconst chip8-fb-width 64)
 (defconst chip8-fb-height 32)
 
@@ -304,7 +305,8 @@ nil: Vx = Vy SHR/SHL 1"
                     (setq collisionp t))
                   (aset chip8-fb idx
                         (logxor (aref chip8-fb idx) 1)))))))
-        (aset chip8-regs chip8-VF (if collisionp 1 0))))
+        (aset chip8-regs chip8-VF (if collisionp 1 0))
+        (setq chip8-fb-dirty t)))
      ((= type #xE)
       (let ((reg (ash (logand #x0F00 instruction) -8)))
         (cond
@@ -360,19 +362,65 @@ nil: Vx = Vy SHR/SHL 1"
      (t
       (error "unknown instruction: %04X" instruction)))))
 
-(defun chip8-debug-fb ()
-  (with-output-to-temp-buffer "*chip8 fb*"
-    (dotimes (row chip8-fb-height)
-      (dotimes (col chip8-fb-width)
-        (if (= (aref chip8-fb (+ (* row chip8-fb-width) col)) 1)
-            (princ "##")
-          (princ "  ")))
-      (terpri))
-    (princ (make-string (* chip8-fb-width 2) ?-))))
+(defconst chip8-timer-interval (/ 1.0 60))
+(defvar chip8-timer nil)
+(defvar chip8-playing nil)
 
-(defun chip8-emulate-rom (path)
+(defconst chip8-buffer "*CHIP-8*")
+(define-derived-mode chip8-mode special-mode "CHIP-8"
+  "CHIP-8 emulator")
+
+(defun chip8-draw-fb ()
+  (with-current-buffer (get-buffer-create chip8-buffer)
+    (let ((buffer-read-only nil))
+      (erase-buffer)
+      (dotimes (row chip8-fb-height)
+        (dotimes (col chip8-fb-width)
+          (if (= (aref chip8-fb (+ (* row chip8-fb-width) col)) 1)
+              (insert "##")
+            (insert "  ")))
+        (insert "\n"))
+      (insert (make-string (* chip8-fb-width 2) ?-)))))
+
+(defcustom chip8-speed-factor 5
+  "Amount of cycles to execute on each timer run.
+As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
+2 to 120 cps, etc."
+  :type 'integer
+  :group 'chip8)
+
+(defun chip8-cycle ()
+  (when chip8-playing
+    (dotimes (_ chip8-speed-factor)
+      (chip8-step))
+    (when chip8-fb-dirty
+      (chip8-draw-fb)
+      (setq chip8-fb-dirty nil))))
+
+(defun chip8-play ()
+  (when (not chip8-timer)
+    (setq chip8-timer (run-with-timer 0 chip8-timer-interval 'chip8-cycle)))
+  (setq chip8-playing t)
+  (message "playing!"))
+
+(defun chip8-pause ()
+  (setq chip8-playing nil)
+  (message "paused"))
+
+(defun chip8-toggle-play-pause ()
+  (interactive)
+  (if chip8-playing
+      (chip8-pause)
+    (chip8-play)))
+
+(define-key chip8-mode-map (kbd "p") 'chip8-toggle-play-pause)
+
+(defun chip8-emulate (path)
+  (interactive "f")
   (chip8-reset)
   (chip8-load-rom path)
-  (while t
-    (chip8-step)
-    (sit-for 0.01)))
+  (with-current-buffer (get-buffer-create chip8-buffer)
+    (chip8-mode)
+    (chip8-draw-fb)
+    (chip8-play))
+  (switch-to-buffer (get-buffer-create chip8-buffer)))
