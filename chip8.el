@@ -160,7 +160,8 @@ nil: Vx = Vy SHR/SHL 1"
       (cond
        ((= instruction #x00E0)
         (chip8-log "CLS")
-        (setq chip8-fb (make-vector (* 32 64) 0)))
+        (setq chip8-fb (make-vector (* 32 64) 0))
+        (setq chip8-fb-dirty t))
        ((= instruction #x00EE)
         (chip8-log "RET")
         (aset chip8-regs chip8-SP (1- (aref chip8-regs chip8-SP)))
