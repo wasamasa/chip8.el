@@ -373,7 +373,19 @@ nil: Vx = Vy SHR/SHL 1"
 
 (defconst chip8-buffer "*CHIP-8*")
 (define-derived-mode chip8-mode special-mode "CHIP-8"
-  "CHIP-8 emulator")
+  "CHIP-8 emulator"
+  (buffer-disable-undo))
+
+(defface chip8-black
+  '((t (:foreground "white" :background "black")))
+  "Face for black pixels")
+
+(defface chip8-white
+  '((t (:foreground "black" :background "white")))
+  "Face for white pixels")
+
+(defconst chip8-black-pixel (propertize "  " 'face 'chip8-black))
+(defconst chip8-white-pixel (propertize "  " 'face 'chip8-white))
 
 (defun chip8-draw-fb ()
   (with-current-buffer (get-buffer-create chip8-buffer)
@@ -382,10 +394,9 @@ nil: Vx = Vy SHR/SHL 1"
       (dotimes (row chip8-fb-height)
         (dotimes (col chip8-fb-width)
           (if (= (aref chip8-fb (+ (* row chip8-fb-width) col)) 1)
-              (insert "##")
-            (insert "  ")))
-        (insert "\n"))
-      (insert (make-string (* chip8-fb-width 2) ?-)))))
+              (insert chip8-white-pixel)
+            (insert chip8-black-pixel)))
+        (insert "\n")))))
 
 (defcustom chip8-speed-factor 5
   "Amount of cycles to execute on each timer run.
