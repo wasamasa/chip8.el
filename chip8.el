@@ -45,10 +45,13 @@ nil: Vx = Vy SHR/SHL 1"
   :group 'chip8)
 
 (defvar chip8-debug nil)
+(defconst chip8-debug-buffer "*CHIP-8 debug*")
 
 (defun chip8-log (fmt &rest args)
   (when chip8-debug
-    (apply 'message fmt args)))
+    (with-current-buffer (get-buffer-create chip8-debug-buffer)
+      (goto-char (point-max))
+      (insert (apply 'format (concat fmt "\n") args)))))
 
 (defvar chip8-program-start #x200)
 
@@ -144,11 +147,11 @@ nil: Vx = Vy SHR/SHL 1"
          (b1 (aref chip8-ram PC))
          (b2 (aref chip8-ram (1+ PC)))
          (instruction (logior (ash b1 8) b2)))
+    (chip8-log "PC: %03X" (aref chip8-regs chip8-PC))
     (chip8-bump-PC)
     (chip8-exec instruction)))
 
 (defun chip8-exec (instruction)
-  (chip8-log "PC: %03X" (aref chip8-regs chip8-PC))
   (let ((type (ash (logand #xF000 instruction) -12))
         (subtype (logand #x000F instruction))
         (low-byte (logand #x00FF instruction)))
