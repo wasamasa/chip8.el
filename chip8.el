@@ -398,6 +398,12 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
   (when chip8-playing
     (dotimes (_ chip8-speed-factor)
       (chip8-step))
+    (let ((DT (aref chip8-regs chip8-DT))
+          (ST (aref chip8-regs chip8-ST)))
+      (when (> DT 0)
+        (aset chip8-regs chip8-DT (1- DT)))
+      (when (> ST 0)
+        (aset chip8-regs chip8-ST (1- ST))))
     (when chip8-fb-dirty
       (chip8-draw-fb)
       (setq chip8-fb-dirty nil))))
