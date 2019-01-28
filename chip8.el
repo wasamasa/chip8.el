@@ -302,7 +302,8 @@ nil: Vx = Vy SHR/SHL 1"
           (let ((byte (aref chip8-ram (+ I yo))))
             (dotimes (xo 8)
               (let ((power (ash 1 (- 7 xo)))
-                    (idx (+ (* chip8-fb-width (+ y yo))
+                    (idx (+ (* chip8-fb-width
+                               (mod (+ y yo) chip8-fb-height))
                             (mod (+ x xo) chip8-fb-width))))
                 (when (= (logand byte power) power)
                   (when (= (aref chip8-fb idx) 1)
