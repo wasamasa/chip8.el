@@ -420,6 +420,10 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
   :type 'integer
   :group 'chip8)
 
+(defun chip8--memcpy (dest src n)
+  (dotimes (i n)
+    (aset dest i (aref src i))))
+
 (defun chip8-cycle ()
   (when chip8-playing
     (dotimes (_ chip8-speed-factor)
@@ -432,7 +436,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
         (aset chip8-regs chip8-ST (1- ST))))
     (when chip8-fb-dirty
       (chip8-draw-fb)
-      (setq chip8-old-fb (copy-tree chip8-fb t))
+      (chip8--memcpy chip8-old-fb chip8-fb chip8-fb-size)
       (setq chip8-fb-dirty nil))))
 
 (defun chip8-play ()
