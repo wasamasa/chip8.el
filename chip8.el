@@ -455,8 +455,15 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
   (chip8-play)
   (message "reset"))
 
+(defun chip8-quit-window (arg)
+  (interactive "P")
+  (quit-window arg)
+  (setq chip8-playing nil)
+  (message "automatically paused"))
+
 (define-key chip8-mode-map (kbd "p") 'chip8-toggle-play-pause)
 (define-key chip8-mode-map (kbd "g") 'chip8-reset)
+(define-key chip8-mode-map (kbd "q") 'chip8-quit-window)
 
 (defun chip8-emulate (path)
   (interactive "f")
