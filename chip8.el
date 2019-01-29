@@ -1,4 +1,4 @@
-;;; chip8.el --- A CHIP-8 Emulator
+;;; chip8.el --- A CHIP-8 Emulator  -*- firestarter: (byte-compile-file (buffer-file-name)); -*-
 
 ;; Copyright (C) 2019 Vasilij Schneidermann <v.schneidermann@gmail.com>
 
