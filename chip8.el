@@ -88,31 +88,31 @@ nil: Vx = Vy SHR/SHL 1"
 (defconst chip8-fb-height 32)
 (defconst chip8-fb-size (* chip8-fb-height chip8-fb-width))
 
+(defun chip8--memcpy (dest dest-offset src src-offset n)
+  (dotimes (i n)
+    (aset dest (+ dest-offset i) (aref src (+ src-offset i)))))
+
 (defconst chip8-sprites
-  '((#xF0 #x90 #x90 #x90 #xF0) ; 0
-    (#x20 #x60 #x20 #x20 #x70) ; 1
-    (#xF0 #x10 #xF0 #x80 #xF0) ; 2
-    (#xF0 #x10 #xF0 #x10 #xF0) ; 3
-    (#x90 #x90 #xF0 #x10 #x10) ; 4
-    (#xF0 #x80 #xF0 #x10 #xF0) ; 5
-    (#xF0 #x80 #xF0 #x90 #xF0) ; 6
-    (#xF0 #x10 #x20 #x40 #x40) ; 7
-    (#xF0 #x90 #xF0 #x90 #xF0) ; 8
-    (#xF0 #x90 #xF0 #x10 #xF0) ; 9
-    (#xF0 #x90 #xF0 #x90 #x90) ; A
-    (#xE0 #x90 #xE0 #x90 #xE0) ; B
-    (#xF0 #x80 #x80 #x80 #xF0) ; C
-    (#xE0 #x90 #x90 #x90 #xE0) ; D
-    (#xF0 #x80 #xF0 #x80 #xF0) ; E
-    (#xF0 #x80 #xF0 #x80 #x80) ; F
-    ))
+  (vector #xF0 #x90 #x90 #x90 #xF0 ; 0
+          #x20 #x60 #x20 #x20 #x70 ; 1
+          #xF0 #x10 #xF0 #x80 #xF0 ; 2
+          #xF0 #x10 #xF0 #x10 #xF0 ; 3
+          #x90 #x90 #xF0 #x10 #x10 ; 4
+          #xF0 #x80 #xF0 #x10 #xF0 ; 5
+          #xF0 #x80 #xF0 #x90 #xF0 ; 6
+          #xF0 #x10 #x20 #x40 #x40 ; 7
+          #xF0 #x90 #xF0 #x90 #xF0 ; 8
+          #xF0 #x90 #xF0 #x10 #xF0 ; 9
+          #xF0 #x90 #xF0 #x90 #x90 ; A
+          #xE0 #x90 #xE0 #x90 #xE0 ; B
+          #xF0 #x80 #x80 #x80 #xF0 ; C
+          #xE0 #x90 #x90 #x90 #xE0 ; D
+          #xF0 #x80 #xF0 #x80 #xF0 ; E
+          #xF0 #x80 #xF0 #x80 #x80 ; F
+   ))
 
 (defun chip8-load-sprites ()
-  (let ((addr #x000))
-    (dolist (sprite chip8-sprites)
-      (dolist (byte sprite)
-        (aset chip8-ram addr byte)
-        (setq addr (1+ addr))))))
+  (chip8--memcpy chip8-ram 0 chip8-sprites 0 (length chip8-sprites)))
 
 (defun chip8-init ()
   (random t)
@@ -350,13 +350,11 @@ nil: Vx = Vy SHR/SHL 1"
          ((= low-byte #x55)
           (let ((I (aref chip8-regs chip8-I)))
             (chip8-log "LD [I], V%X" reg)
-            (dotimes (i (1+ reg))
-              (aset chip8-ram (+ I i) (aref chip8-regs i)))))
+            (chip8--memcpy chip8-ram I chip8-regs 0 (1+ reg))))
          ((= low-byte #x65)
           (let ((I (aref chip8-regs chip8-I)))
             (chip8-log "LD V%X, [I]" reg)
-            (dotimes (i (1+ reg))
-              (aset chip8-regs i (aref chip8-ram (+ I i))))))
+            (chip8--memcpy chip8-regs 0 chip8-ram I (1+ reg))))
          (t
           (error "unknown instruction: %04X" instruction)))))
      (t
@@ -413,10 +411,6 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
   :type 'integer
   :group 'chip8)
 
-(defun chip8--memcpy (dest src n)
-  (dotimes (i n)
-    (aset dest i (aref src i))))
-
 (defun chip8-beep ()
   ;; TODO: actually beep
   (let ((visible-bell t))
@@ -435,7 +429,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
         (aset chip8-regs chip8-ST (1- ST))))
     (when chip8-fb-dirty
       (chip8-draw-fb)
-      (chip8--memcpy chip8-old-fb chip8-fb chip8-fb-size)
+      (chip8--memcpy chip8-old-fb 0 chip8-fb 0 chip8-fb-size)
       (setq chip8-fb-dirty nil))))
 
 (defun chip8-play ()
