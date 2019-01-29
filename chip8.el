@@ -417,6 +417,11 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
   (dotimes (i n)
     (aset dest i (aref src i))))
 
+(defun chip8-beep ()
+  ;; TODO: actually beep
+  (let ((visible-bell t))
+    (ding)))
+
 (defun chip8-cycle ()
   (when chip8-playing
     (dotimes (_ chip8-speed-factor)
@@ -426,6 +431,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
       (when (> DT 0)
         (aset chip8-regs chip8-DT (1- DT)))
       (when (> ST 0)
+        (chip8-beep)
         (aset chip8-regs chip8-ST (1- ST))))
     (when chip8-fb-dirty
       (chip8-draw-fb)
