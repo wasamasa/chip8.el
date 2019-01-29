@@ -90,9 +90,11 @@ nil: Vx = Vy SHR/SHL 1"
 (defvar chip8-ram nil)
 (defvar chip8-stack nil)
 (defvar chip8-fb nil)
+(defvar chip8-old-fb nil)
 (defvar chip8-fb-dirty nil)
 (defconst chip8-fb-width 64)
 (defconst chip8-fb-height 32)
+(defconst chip8-fb-size (* chip8-fb-height chip8-fb-width))
 
 (defconst chip8-sprites
   '((#xF0 #x90 #x90 #x90 #xF0) ; 0
@@ -126,7 +128,8 @@ nil: Vx = Vy SHR/SHL 1"
   (setq chip8-ram (make-vector #xFFF 0))
   (chip8-load-sprites)
   (setq chip8-stack (make-vector 16 0))
-  (setq chip8-fb (make-vector (* chip8-fb-height chip8-fb-width) 0)))
+  (setq chip8-fb (make-vector chip8-fb-size 0))
+  (setq chip8-old-fb (make-vector chip8-fb-size -1)))
 
 (defun chip8-load-rom (path)
   (with-temp-buffer
@@ -387,16 +390,28 @@ nil: Vx = Vy SHR/SHL 1"
 (defconst chip8-black-pixel (propertize "  " 'face 'chip8-black))
 (defconst chip8-white-pixel (propertize "  " 'face 'chip8-white))
 
-(defun chip8-draw-fb ()
+(defun chip8-clear-fb ()
   (with-current-buffer (get-buffer-create chip8-buffer)
     (let ((buffer-read-only nil))
       (erase-buffer)
+      (dotimes (_ chip8-fb-height)
+        (dotimes (_ chip8-fb-width)
+          (insert chip8-black-pixel))
+        (insert "\n")))))
+
+(defun chip8-draw-fb ()
+  (with-current-buffer (get-buffer-create chip8-buffer)
+    (let ((buffer-read-only nil))
+      (goto-char (point-min))
       (dotimes (row chip8-fb-height)
         (dotimes (col chip8-fb-width)
-          (if (= (aref chip8-fb (+ (* row chip8-fb-width) col)) 1)
-              (insert chip8-white-pixel)
-            (insert chip8-black-pixel)))
-        (insert "\n")))))
+          (let* ((idx (+ (* row chip8-fb-width) col))
+                 (pixel (aref chip8-fb idx)))
+            (if (= pixel (aref chip8-old-fb idx))
+                (forward-char 2)
+              (delete-char 2)
+              (insert (if (zerop pixel) chip8-black-pixel chip8-white-pixel)))))
+        (forward-char 1)))))
 
 (defcustom chip8-speed-factor 5
   "Amount of cycles to execute on each timer run.
@@ -417,6 +432,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
         (aset chip8-regs chip8-ST (1- ST))))
     (when chip8-fb-dirty
       (chip8-draw-fb)
+      (setq chip8-old-fb (copy-tree chip8-fb t))
       (setq chip8-fb-dirty nil))))
 
 (defun chip8-play ()
@@ -443,6 +459,9 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
   (chip8-load-rom path)
   (with-current-buffer (get-buffer-create chip8-buffer)
     (chip8-mode)
-    (chip8-draw-fb)
+    (chip8-clear-fb)
     (chip8-play))
   (switch-to-buffer (get-buffer-create chip8-buffer)))
+
+(provide 'chip8)
+;;; chip8.el ends here
