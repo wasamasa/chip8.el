@@ -114,7 +114,7 @@ nil: Vx = Vy SHR/SHL 1"
         (aset chip8-ram addr byte)
         (setq addr (1+ addr))))))
 
-(defun chip8-reset ()
+(defun chip8-init ()
   (random t)
   (setq chip8-regs (chip8-cpu-new))
   (setq chip8-ram (make-vector #xFFF 0))
@@ -365,6 +365,7 @@ nil: Vx = Vy SHR/SHL 1"
 (defconst chip8-timer-interval (/ 1.0 60))
 (defvar chip8-timer nil)
 (defvar chip8-playing nil)
+(defvar chip8-current-rom-path nil)
 
 (defconst chip8-buffer "*CHIP-8*")
 (define-derived-mode chip8-mode special-mode "CHIP-8"
@@ -447,11 +448,20 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
       (chip8-pause)
     (chip8-play)))
 
+(defun chip8-reset ()
+  (interactive)
+  (chip8-init)
+  (chip8-load-rom chip8-current-rom-path)
+  (chip8-play)
+  (message "reset"))
+
 (define-key chip8-mode-map (kbd "p") 'chip8-toggle-play-pause)
+(define-key chip8-mode-map (kbd "g") 'chip8-reset)
 
 (defun chip8-emulate (path)
   (interactive "f")
-  (chip8-reset)
+  (chip8-init)
+  (setq chip8-current-rom-path path)
   (chip8-load-rom path)
   (with-current-buffer (get-buffer-create chip8-buffer)
     (chip8-mode)
