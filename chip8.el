@@ -44,6 +44,11 @@ nil: Vx = Vy SHR/SHL 1"
   :type 'boolean
   :group 'chip8)
 
+(defconst chip8-buffer "*CHIP-8*")
+(define-derived-mode chip8-mode special-mode "CHIP-8"
+  "CHIP-8 emulator"
+  (buffer-disable-undo))
+
 (defvar chip8-debug nil)
 (defconst chip8-debug-buffer "*CHIP-8 debug*")
 
@@ -63,10 +68,6 @@ nil: Vx = Vy SHR/SHL 1"
           0 ; DT
           0 ; ST
           ))
-
-(defmacro chip8-enum-test (name)
-  (let ((identifier (intern (concat "chip8-" name))))
-    `(defconst ,identifier 0)))
 
 (defmacro chip8-enum (&rest names)
   (let ((i 0)
@@ -114,8 +115,45 @@ nil: Vx = Vy SHR/SHL 1"
 (defun chip8-load-sprites ()
   (chip8--memcpy chip8-ram 0 chip8-sprites 0 (length chip8-sprites)))
 
+(defconst chip8-keys-hex "0123456789abcdef")
+(defconst chip8-keys-qwerty "x123qweasdzc4rfv")
+(defconst chip8-keys-qwertz "x123qweasdyc4rfv")
+(defconst chip8-keys-azerty "x123qweasdyc4rfv")
+
+(defcustom chip8-keys chip8-keys-hex
+  "Sequence to use for hexadecimal CHIP-8 keypad.
+The string corresponds to the keys triggering the codes 0 to 9
+followed by a to f."
+  :type `(choice
+          (const :tag "Hex" ,chip8-keys-hex)
+          (const :tag "QWERTY" ,chip8-keys-qwerty)
+          (const :tag "QWERTZ" ,chip8-keys-qwertz)
+          (const :tag "AZERTY" ,chip8-keys-azerty)
+          string)
+  :group 'chip8)
+
+(defvar chip8-key-state (make-vector 16 0))
+
+(defcustom chip8-key-timeout 0.1
+  "Number of seconds a key is considered pressed after key down."
+  :type 'float
+  :group 'chip8)
+
+(defun chip8-init-keys ()
+  (dotimes (i 16)
+    (define-key chip8-mode-map (string (aref chip8-keys i)) 'chip8-handle-key)))
+
+(defun chip8-handle-key ()
+  (interactive)
+  (let ((key (string-match-p (this-command-keys) chip8-keys)))
+    (when (not key)
+      (user-error "unknown key"))
+    (chip8-log "Pressed key %X" key)
+    (aset chip8-key-state key (float-time))))
+
 (defun chip8-init ()
   (random t)
+  (chip8-init-keys)
   (setq chip8-regs (chip8-cpu-new))
   (setq chip8-ram (make-vector #xFFF 0))
   (chip8-load-sprites)
@@ -308,12 +346,19 @@ nil: Vx = Vy SHR/SHL 1"
         (aset chip8-regs chip8-VF (if collisionp 1 0))
         (setq chip8-fb-dirty t)))
      ((= type #xE)
-      (let ((reg (ash (logand #x0F00 instruction) -8)))
+      (let* ((reg (ash (logand #x0F00 instruction) -8))
+             (key (aref chip8-regs reg)))
         (cond
          ((= low-byte #x9E)
-          (error "unimplemented: SKP V%X" reg))
+          (chip8-log "SKP V%X" reg)
+          (when (< (- (float-time) (aref chip8-key-state key))
+                   chip8-key-timeout)
+            (chip8-bump-PC)))
          ((= low-byte #xA1)
-          (error "unimplemented: SKNP V%X" reg))
+          (chip8-log "SKNP V%X" reg)
+          (when (> (- (float-time) (aref chip8-key-state key))
+                   chip8-key-timeout)
+            (chip8-bump-PC)))
          (t
           (error "unknown instruction: %04X" instruction)))))
      ((= type #xF)
@@ -364,11 +409,6 @@ nil: Vx = Vy SHR/SHL 1"
 (defvar chip8-timer nil)
 (defvar chip8-playing nil)
 (defvar chip8-current-rom-path nil)
-
-(defconst chip8-buffer "*CHIP-8*")
-(define-derived-mode chip8-mode special-mode "CHIP-8"
-  "CHIP-8 emulator"
-  (buffer-disable-undo))
 
 (defface chip8-black
   '((t (:foreground "white" :background "black")))
@@ -464,6 +504,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
 (define-key chip8-mode-map (kbd "p") 'chip8-toggle-play-pause)
 (define-key chip8-mode-map (kbd "g") 'chip8-reset)
 (define-key chip8-mode-map (kbd "q") 'chip8-quit-window)
+(define-key chip8-mode-map (kbd "Q") 'chip8-quit-window)
 
 (defun chip8-emulate (path)
   (interactive "f")
