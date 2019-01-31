@@ -1,8 +1,8 @@
 ;;; chip8.el --- A CHIP-8 Emulator  -*- firestarter: (byte-compile-file (buffer-file-name)); -*-
 
-;; Copyright (C) 2019 Vasilij Schneidermann <v.schneidermann@gmail.com>
+;; Copyright (C) 2019 Vasilij Schneidermann <mail@vasilij.de>
 
-;; Author: Vasilij Schneidermann <v.schneidermann@gmail.com>
+;; Author: Vasilij Schneidermann <mail@vasilij.de>
 ;; URL: https://github.com/wasamasa/chip-8
 ;; Version: 0.0.1
 ;; Package-Requires:
