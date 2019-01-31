@@ -27,8 +27,13 @@
 
 ;;; Commentary:
 
-;; This might become a working CHIP-8 emulator, using SVG graphics for
-;; drawing.
+;; This is an emulator for the CHIP-8 VM which is capable of playing
+;; plenty of classic games on modest machines, such as the infinitely
+;; customizable text editor.  Use M-x chip8-emulate and select a ROM
+;; file to be played.  You may want to customize `chip8-keys' (to
+;; select a keymap fitting your keyboard), `chip8-key-timeout' (in
+;; case key repeat doesn't feel right) and `chip8-speed-factor' (to
+;; increase the speed for slow ROMs).
 
 ;;; Code:
 
