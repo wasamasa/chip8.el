@@ -407,7 +407,7 @@ followed by a to f."
 
 (defconst chip8-timer-interval (/ 1.0 60))
 (defvar chip8-timer nil)
-(defvar chip8-playing nil)
+(defvar chip8-state nil)
 (defvar chip8-current-rom-path nil)
 
 (defface chip8-black
@@ -457,7 +457,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
     (ding)))
 
 (defun chip8-cycle ()
-  (when chip8-playing
+  (when (eq chip8-state 'playing)
     (dotimes (_ chip8-speed-factor)
       (chip8-step))
     (let ((DT (aref chip8-regs chip8-DT))
@@ -475,18 +475,20 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
 (defun chip8-play ()
   (when (not chip8-timer)
     (setq chip8-timer (run-with-timer 0 chip8-timer-interval 'chip8-cycle)))
-  (setq chip8-playing t)
+  (setq chip8-state 'playing)
   (message "playing!"))
 
 (defun chip8-pause ()
-  (setq chip8-playing nil)
+  (setq chip8-state 'paused)
   (message "paused"))
 
 (defun chip8-toggle-play-pause ()
   (interactive)
-  (if chip8-playing
-      (chip8-pause)
-    (chip8-play)))
+  (cond
+   ((eq chip8-state 'playing)
+    (chip8-pause))
+   ((eq chip8-state 'paused)
+    (chip8-play))))
 
 (defun chip8-reset ()
   (interactive)
@@ -498,8 +500,9 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
 (defun chip8-quit-window (arg)
   (interactive "P")
   (quit-window arg)
-  (setq chip8-playing nil)
-  (message "automatically paused"))
+  (when (eq chip8-state 'playing)
+    (setq chip8-state 'paused)
+    (message "automatically paused")))
 
 (define-key chip8-mode-map (kbd "p") 'chip8-toggle-play-pause)
 (define-key chip8-mode-map (kbd "g") 'chip8-reset)
