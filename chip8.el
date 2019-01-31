@@ -55,7 +55,7 @@ nil: Vx = Vy SHR/SHL 1"
   :type 'boolean
   :group 'chip8)
 
-(defcustom chip8-speed-factor 5
+(defcustom chip8-speed-factor 10
   "Amount of cycles to execute on each timer run.
 As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
 2 to 120 cps, etc."
@@ -100,7 +100,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
 (defconst chip8-keys-qwertz "x123qweasdyc4rfv")
 (defconst chip8-keys-azerty "x123qweasdyc4rfv")
 
-(defcustom chip8-keys chip8-keys-hex
+(defcustom chip8-keys chip8-keys-qwerty
   "Sequence to use for hexadecimal CHIP-8 keypad.
 The string corresponds to the keys triggering the codes 0 to 9
 followed by a to f."
