@@ -42,6 +42,12 @@
   :group 'games
   :prefix "chip8-")
 
+(defvar chip8-debug nil)
+(defconst chip8-debug-buffer "*CHIP-8 debug*")
+
+(defconst chip8-buffer "*CHIP-8*")
+(defconst chip8-program-start #x200)
+
 (defcustom chip8-ignore-second-shift-arg t
   "If non-nil, emulate a wide-spread bug in shift ops.
 t: Vx = Vx SHR/SHL 1
@@ -49,40 +55,12 @@ nil: Vx = Vy SHR/SHL 1"
   :type 'boolean
   :group 'chip8)
 
-(defconst chip8-buffer "*CHIP-8*")
-(define-derived-mode chip8-mode special-mode "CHIP-8"
-  "CHIP-8 emulator"
-  (buffer-disable-undo))
-
-(defvar chip8-debug nil)
-(defconst chip8-debug-buffer "*CHIP-8 debug*")
-
-(defun chip8-log (fmt &rest args)
-  (when chip8-debug
-    (with-current-buffer (get-buffer-create chip8-debug-buffer)
-      (goto-char (point-max))
-      (insert (apply 'format (concat fmt "\n") args)))))
-
-(defvar chip8-program-start #x200)
-
-(defun chip8-cpu-new ()
-  (vector 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 ; V0-VF
-          0 ; I
-          chip8-program-start ; PC
-          0 ; SP
-          0 ; DT
-          0 ; ST
-          ))
-
-(defmacro chip8-enum (&rest names)
-  (let ((i 0)
-        defs)
-    (while names
-      (push `(defconst ,(intern (format "chip8-%s" (pop names))) ,i) defs)
-      (setq i (1+ i)))
-    `(progn ,@ (nreverse defs))))
-
-(chip8-enum V0 V1 V2 V3 V4 V5 V6 V7 V8 V9 VA VB VC VD VE VF I PC SP DT ST)
+(defcustom chip8-speed-factor 5
+  "Amount of cycles to execute on each timer run.
+As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
+2 to 120 cps, etc."
+  :type 'integer
+  :group 'chip8)
 
 (defvar chip8-regs nil)
 (defvar chip8-ram nil)
@@ -93,10 +71,6 @@ nil: Vx = Vy SHR/SHL 1"
 (defconst chip8-fb-width 64)
 (defconst chip8-fb-height 32)
 (defconst chip8-fb-size (* chip8-fb-height chip8-fb-width))
-
-(defun chip8--memcpy (dest dest-offset src src-offset n)
-  (dotimes (i n)
-    (aset dest (+ dest-offset i) (aref src (+ src-offset i)))))
 
 (defconst chip8-sprites
   (vector #xF0 #x90 #x90 #x90 #xF0 ; 0
@@ -117,8 +91,9 @@ nil: Vx = Vy SHR/SHL 1"
           #xF0 #x80 #xF0 #x80 #x80 ; F
    ))
 
-(defun chip8-load-sprites ()
-  (chip8--memcpy chip8-ram 0 chip8-sprites 0 (length chip8-sprites)))
+(defvar chip8-state nil)
+(defvar chip8-state-pending-reg nil)
+(defvar chip8-key-state (make-vector 16 0))
 
 (defconst chip8-keys-hex "0123456789abcdef")
 (defconst chip8-keys-qwerty "x123qweasdzc4rfv")
@@ -137,14 +112,71 @@ followed by a to f."
           string)
   :group 'chip8)
 
-(defvar chip8-state nil)
-(defvar chip8-state-pending-reg nil)
-(defvar chip8-key-state (make-vector 16 0))
-
 (defcustom chip8-key-timeout 0.1
   "Number of seconds a key is considered pressed after key down."
   :type 'float
   :group 'chip8)
+
+(defconst chip8-timer-interval (/ 1.0 60))
+(defvar chip8-timer nil)
+(defvar chip8-current-rom-path nil)
+
+(defface chip8-black
+  '((t (:foreground "white" :background "black")))
+  "Face for black pixels")
+
+(defface chip8-white
+  '((t (:foreground "black" :background "white")))
+  "Face for white pixels")
+
+(defconst chip8-black-pixel (propertize "  " 'face 'chip8-black))
+(defconst chip8-white-pixel (propertize "  " 'face 'chip8-white))
+
+(defcustom chip8-beep-start-function (lambda () (message "beep"))
+  "Function called when the emulator starts beeping."
+  :type 'function
+  :group 'chip8)
+
+(defcustom chip8-beep-stop-function (lambda () (message nil))
+  "Function called when the emulator stops beeping."
+  :type 'function
+  :group 'chip8)
+
+(define-derived-mode chip8-mode special-mode "CHIP-8"
+  "CHIP-8 emulator"
+  (buffer-disable-undo))
+
+(defmacro chip8-enum (&rest names)
+  (let ((i 0)
+        defs)
+    (while names
+      (push `(defconst ,(intern (format "chip8-%s" (pop names))) ,i) defs)
+      (setq i (1+ i)))
+    `(progn ,@ (nreverse defs))))
+
+(chip8-enum V0 V1 V2 V3 V4 V5 V6 V7 V8 V9 VA VB VC VD VE VF I PC SP DT ST)
+
+(defun chip8-log (fmt &rest args)
+  (when chip8-debug
+    (with-current-buffer (get-buffer-create chip8-debug-buffer)
+      (goto-char (point-max))
+      (insert (apply 'format (concat fmt "\n") args)))))
+
+(defun chip8-cpu-new ()
+  (vector 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 ; V0-VF
+          0 ; I
+          chip8-program-start ; PC
+          0 ; SP
+          0 ; DT
+          0 ; ST
+          ))
+
+(defun chip8--memcpy (dest dest-offset src src-offset n)
+  (dotimes (i n)
+    (aset dest (+ dest-offset i) (aref src (+ src-offset i)))))
+
+(defun chip8-load-sprites ()
+  (chip8--memcpy chip8-ram 0 chip8-sprites 0 (length chip8-sprites)))
 
 (defun chip8-init-keys ()
   (dotimes (i 16)
@@ -392,7 +424,9 @@ followed by a to f."
           (aset chip8-regs chip8-DT (aref chip8-regs reg)))
          ((= low-byte #x18)
           (chip8-log "LD ST, V%X" reg)
-          (aset chip8-regs chip8-ST (aref chip8-regs reg)))
+          (aset chip8-regs chip8-ST (aref chip8-regs reg))
+          (when (> (aref chip8-regs chip8-ST) 0)
+            (funcall chip8-beep-start-function)))
          ((= low-byte #x1E)
           (let ((I (aref chip8-regs chip8-I)))
             (chip8-log "ADD I, V%X" reg)
@@ -422,21 +456,6 @@ followed by a to f."
      (t
       (error "unknown instruction: %04X" instruction)))))
 
-(defconst chip8-timer-interval (/ 1.0 60))
-(defvar chip8-timer nil)
-(defvar chip8-current-rom-path nil)
-
-(defface chip8-black
-  '((t (:foreground "white" :background "black")))
-  "Face for black pixels")
-
-(defface chip8-white
-  '((t (:foreground "black" :background "white")))
-  "Face for white pixels")
-
-(defconst chip8-black-pixel (propertize "  " 'face 'chip8-black))
-(defconst chip8-white-pixel (propertize "  " 'face 'chip8-white))
-
 (defun chip8-clear-fb ()
   (with-current-buffer (get-buffer-create chip8-buffer)
     (let ((buffer-read-only nil))
@@ -460,18 +479,6 @@ followed by a to f."
               (insert (if (zerop pixel) chip8-black-pixel chip8-white-pixel)))))
         (forward-char 1)))))
 
-(defcustom chip8-speed-factor 5
-  "Amount of cycles to execute on each timer run.
-As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
-2 to 120 cps, etc."
-  :type 'integer
-  :group 'chip8)
-
-(defun chip8-beep ()
-  ;; TODO: actually beep
-  (let ((visible-bell t))
-    (ding)))
-
 (defun chip8-cycle ()
   ;; HACK: `chip8-step' may change `chip8-state' when waiting for user
   ;; input, so we need to check on each iteration
@@ -484,8 +491,9 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
       (when (> DT 0)
         (aset chip8-regs chip8-DT (1- DT)))
       (when (> ST 0)
-        (chip8-beep)
-        (aset chip8-regs chip8-ST (1- ST))))
+        (aset chip8-regs chip8-ST (1- ST))
+        (when (zerop (aref chip8-regs chip8-ST))
+          (funcall chip8-beep-stop-function))))
     (when chip8-fb-dirty
       (chip8-draw-fb)
       (chip8--memcpy chip8-old-fb 0 chip8-fb 0 chip8-fb-size)
