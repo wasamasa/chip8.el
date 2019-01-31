@@ -240,7 +240,7 @@ followed by a to f."
        ((= instruction #x00E0)
         (chip8-log "CLS")
         (setq chip8-fb (make-vector (* 32 64) 0))
-        (setq chip8-fb-dirty t))
+        (chip8-redraw-fb))
        ((= instruction #x00EE)
         (chip8-log "RET")
         (aset chip8-regs chip8-SP (1- (aref chip8-regs chip8-SP)))
@@ -418,6 +418,7 @@ followed by a to f."
           (chip8-log "LD V%X, K" reg)
           (setq chip8-state 'waiting)
           (setq chip8-state-pending-reg reg)
+          (chip8-redraw-fb)
           (message "press key to continue"))
          ((= low-byte #x15)
           (chip8-log "LD DT, V%X" reg)
@@ -479,6 +480,10 @@ followed by a to f."
               (insert (if (zerop pixel) chip8-black-pixel chip8-white-pixel)))))
         (forward-char 1)))))
 
+(defun chip8-redraw-fb ()
+  (chip8-draw-fb)
+  (chip8--memcpy chip8-old-fb 0 chip8-fb 0 chip8-fb-size))
+
 (defun chip8-cycle ()
   ;; HACK: `chip8-step' may change `chip8-state' when waiting for user
   ;; input, so we need to check on each iteration
@@ -495,8 +500,7 @@ followed by a to f."
         (when (zerop (aref chip8-regs chip8-ST))
           (funcall chip8-beep-stop-function))))
     (when chip8-fb-dirty
-      (chip8-draw-fb)
-      (chip8--memcpy chip8-old-fb 0 chip8-fb 0 chip8-fb-size)
+      (chip8-redraw-fb)
       (setq chip8-fb-dirty nil))))
 
 (defun chip8-play ()
