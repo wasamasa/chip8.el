@@ -137,6 +137,8 @@ followed by a to f."
           string)
   :group 'chip8)
 
+(defvar chip8-state nil)
+(defvar chip8-state-pending-reg nil)
 (defvar chip8-key-state (make-vector 16 0))
 
 (defcustom chip8-key-timeout 0.1
@@ -154,7 +156,14 @@ followed by a to f."
     (when (not key)
       (user-error "unknown key"))
     (chip8-log "Pressed key %X" key)
-    (aset chip8-key-state key (float-time))))
+    (cond
+     ((eq chip8-state 'playing)
+      (aset chip8-key-state key (float-time)))
+     ((eq chip8-state 'waiting)
+      (aset chip8-regs chip8-state-pending-reg key)
+      (setq chip8-state-pending-reg nil)
+      (setq chip8-state 'playing)
+      (message "playing!")))))
 
 (defun chip8-init ()
   (random t)
@@ -374,7 +383,10 @@ followed by a to f."
             (chip8-log "LD V%X, DT" reg)
             (aset chip8-regs reg DT)))
          ((= low-byte #x0A)
-          (error "unimplemented: LD V%X, K" reg))
+          (chip8-log "LD V%X, K" reg)
+          (setq chip8-state 'waiting)
+          (setq chip8-state-pending-reg reg)
+          (message "press key to continue"))
          ((= low-byte #x15)
           (chip8-log "LD DT, V%X" reg)
           (aset chip8-regs chip8-DT (aref chip8-regs reg)))
@@ -412,7 +424,6 @@ followed by a to f."
 
 (defconst chip8-timer-interval (/ 1.0 60))
 (defvar chip8-timer nil)
-(defvar chip8-state nil)
 (defvar chip8-current-rom-path nil)
 
 (defface chip8-black
@@ -462,9 +473,12 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
     (ding)))
 
 (defun chip8-cycle ()
+  ;; HACK: `chip8-step' may change `chip8-state' when waiting for user
+  ;; input, so we need to check on each iteration
+  (dotimes (_ chip8-speed-factor)
+    (when (eq chip8-state 'playing)
+      (chip8-step)))
   (when (eq chip8-state 'playing)
-    (dotimes (_ chip8-speed-factor)
-      (chip8-step))
     (let ((DT (aref chip8-regs chip8-DT))
           (ST (aref chip8-regs chip8-ST)))
       (when (> DT 0)
@@ -514,6 +528,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
 (define-key chip8-mode-map (kbd "q") 'chip8-quit-window)
 (define-key chip8-mode-map (kbd "Q") 'chip8-quit-window)
 
+;;;###autoload
 (defun chip8-emulate (path)
   (interactive "f")
   (chip8-init)
