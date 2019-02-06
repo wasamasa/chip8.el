@@ -1,7 +1,7 @@
 chip8.el
 ========
 
-.. image:: https://raw.github.com/wasamasa/chip8.el/master/img/zero.gif
+.. image:: https://raw.github.com/wasamasa/chip8.el/master/img/kaleidoscope.gif
 
 About
 -----
