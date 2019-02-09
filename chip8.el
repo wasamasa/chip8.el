@@ -93,7 +93,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
 
 (defvar chip8-state nil)
 (defvar chip8-state-pending-reg nil)
-(defvar chip8-key-state (make-vector 16 0))
+(defvar chip8-key-state nil)
 
 (defconst chip8-keys-hex "0123456789abcdef")
 (defconst chip8-keys-qwerty "x123qweasdzc4rfv")
@@ -200,6 +200,7 @@ followed by a to f."
 (defun chip8-init ()
   (random t)
   (chip8-init-keys)
+  (setq chip8-key-state (make-vector 16 0))
   (setq chip8-regs (chip8-cpu-new))
   (setq chip8-ram (make-vector #xFFF 0))
   (chip8-load-sprites)
