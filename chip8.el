@@ -62,15 +62,24 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
   :type 'integer
   :group 'chip8)
 
-(defvar chip8-regs nil)
-(defvar chip8-ram nil)
-(defvar chip8-stack nil)
-(defvar chip8-fb nil)
-(defvar chip8-old-fb nil)
-(defvar chip8-fb-dirty nil)
+(defvar chip8-regs
+  (vector 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 ; V0-VF
+          0 ; I
+          chip8-program-start ; PC
+          0 ; SP
+          0 ; DT
+          0 ; ST
+          ))
+(defvar chip8-ram (make-vector #xFFF 0))
+(defvar chip8-stack (make-vector 16 0))
+
 (defconst chip8-fb-width 64)
 (defconst chip8-fb-height 32)
 (defconst chip8-fb-size (* chip8-fb-height chip8-fb-width))
+
+(defvar chip8-fb (make-vector chip8-fb-size 0))
+(defvar chip8-old-fb (make-vector chip8-fb-size -1))
+(defvar chip8-fb-dirty nil)
 
 (defconst chip8-sprites
   (vector #xF0 #x90 #x90 #x90 #xF0 ; 0
@@ -93,7 +102,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
 
 (defvar chip8-state nil)
 (defvar chip8-state-pending-reg nil)
-(defvar chip8-key-state nil)
+(defvar chip8-key-state (make-vector 16 0))
 
 (defconst chip8-keys-hex "0123456789abcdef")
 (defconst chip8-keys-qwerty "x123qweasdzc4rfv")
@@ -162,15 +171,6 @@ followed by a to f."
       (goto-char (point-max))
       (insert (apply 'format (concat fmt "\n") args)))))
 
-(defun chip8-cpu-new ()
-  (vector 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 ; V0-VF
-          0 ; I
-          chip8-program-start ; PC
-          0 ; SP
-          0 ; DT
-          0 ; ST
-          ))
-
 (defun chip8--memcpy (dest dest-offset src src-offset n)
   (dotimes (i n)
     (aset dest (+ dest-offset i) (aref src (+ src-offset i)))))
@@ -200,13 +200,14 @@ followed by a to f."
 (defun chip8-init ()
   (random t)
   (chip8-init-keys)
-  (setq chip8-key-state (make-vector 16 0))
-  (setq chip8-regs (chip8-cpu-new))
-  (setq chip8-ram (make-vector #xFFF 0))
+  (fillarray chip8-key-state 0)
+  (fillarray chip8-regs 0)
+  (aset chip8-regs chip8-PC chip8-program-start)
+  (fillarray chip8-ram 0)
   (chip8-load-sprites)
-  (setq chip8-stack (make-vector 16 0))
-  (setq chip8-fb (make-vector chip8-fb-size 0))
-  (setq chip8-old-fb (make-vector chip8-fb-size -1)))
+  (fillarray chip8-stack 0)
+  (fillarray chip8-fb 0)
+  (fillarray chip8-old-fb -1))
 
 (defun chip8-load-rom (path)
   (with-temp-buffer
@@ -243,7 +244,7 @@ followed by a to f."
       (cond
        ((= instruction #x00E0)
         (chip8-log "CLS")
-        (setq chip8-fb (make-vector (* 32 64) 0))
+        (fillarray chip8-fb 0)
         (chip8-redraw-fb))
        ((= instruction #x00EE)
         (chip8-log "RET")
