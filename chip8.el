@@ -71,7 +71,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
           0 ; ST
           ))
 (defvar chip8-ram (make-vector #xFFF 0))
-(defvar chip8-stack (make-vector 16 0))
+(defvar chip8-stack (make-vector 32 0))
 
 (defconst chip8-fb-width 64)
 (defconst chip8-fb-height 32)
