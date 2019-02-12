@@ -410,8 +410,7 @@ followed by a to f."
        ((= kk #x1E)
         (let ((I (aref chip8-regs chip8-I)))
           (chip8-log "ADD I, V%X" x)
-          ;; TODO: what if I overflows?
-          (aset chip8-regs chip8-I (+ I (aref chip8-regs x)))))
+          (aset chip8-regs chip8-I (logand (+ I (aref chip8-regs x)) #xFFF))))
        ((= kk #x29)
         (let ((n (aref chip8-regs x)))
           (chip8-log "LD F, V%X" x)
