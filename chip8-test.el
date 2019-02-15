@@ -13,15 +13,42 @@
         (setq address (1+ address))))))
 
 (describe "The CHIP-8 CPU"
+  (before-all
+    (setq inhibit-message t))
+
   (before-each
-    (setq inhibit-message t)
     (chip8-init))
 
   (describe "CLS"
     (it "should clear the screen"
+      (spy-on 'chip8-clear-fb)
       (spy-on 'chip8-redraw-fb)
       (chip8-load-instructions #x00E0)
       (chip8-step)
+      (expect 'chip8-redraw-fb :to-have-been-called)))
+
+  (describe "HLT"
+    (it "should stop the emulator"
+      (chip8-load-instructions #x00FD)
+      (expect (chip8-step) :not :to-throw)
+      (expect chip8-state :to-equal 'quit)))
+
+  (describe "EXT 0"
+    (it "should exit extended mode"
+      (spy-on 'chip8-clear-fb)
+      (spy-on 'chip8-redraw-fb)
+      (chip8-load-instructions #x00FE)
+      (expect (chip8-step) :not :to-throw)
+      (expect chip8-extended-p :to-equal nil)
+      (expect 'chip8-redraw-fb :to-have-been-called)))
+
+  (describe "EXT 1"
+    (it "should enter extended mode"
+      (spy-on 'chip8-clear-fb)
+      (spy-on 'chip8-redraw-fb)
+      (chip8-load-instructions #x00FF)
+      (expect (chip8-step) :not :to-throw)
+      (expect chip8-extended-p :to-equal t)
       (expect 'chip8-redraw-fb :to-have-been-called)))
 
   (describe "SYS nnn"
@@ -274,6 +301,14 @@
       (chip8-step)
       (expect (aref chip8-regs chip8-I) :not :to-equal #x999)))
 
+  (describe "LD FF, Vx"
+    (it "should set the I register to the sprite address in the register"
+      (aset chip8-regs chip8-I #x999)
+      (aset chip8-regs chip8-V2 #xF)
+      (chip8-load-instructions #xF230)
+      (chip8-step)
+      (expect (aref chip8-regs chip8-I) :not :to-equal #x999)))
+
   (describe "LD B, Vx"
     (it "should write the decimal digits of the number in the register"
       (aset chip8-regs chip8-I #x800)
@@ -321,6 +356,28 @@
       (aset chip8-ram #x802 #x30)
       (aset chip8-regs chip8-I #x800)
       (chip8-load-instructions #xF265)
+      (chip8-step)
+      (expect (aref chip8-regs chip8-V0) :to-equal #x10)
+      (expect (aref chip8-regs chip8-V1) :to-equal #x20)
+      (expect (aref chip8-regs chip8-V2) :to-equal #x30)))
+
+  (describe "LD [RPL], Vx"
+    (it "should store up to the specified register into the RPL registers"
+      (aset chip8-regs chip8-V0 #x10)
+      (aset chip8-regs chip8-V1 #x20)
+      (aset chip8-regs chip8-V2 #x30)
+      (chip8-load-instructions #xF275)
+      (chip8-step)
+      (expect (aref chip8-RPL-flags 0) :to-equal #x10)
+      (expect (aref chip8-RPL-flags 1) :to-equal #x20)
+      (expect (aref chip8-RPL-flags 2) :to-equal #x30)))
+
+  (describe "LD Vx, [RPL]"
+    (it "should load up to the specified register from the RPL registers"
+      (aset chip8-RPL-flags 0 #x10)
+      (aset chip8-RPL-flags 1 #x20)
+      (aset chip8-RPL-flags 2 #x30)
+      (chip8-load-instructions #xF285)
       (chip8-step)
       (expect (aref chip8-regs chip8-V0) :to-equal #x10)
       (expect (aref chip8-regs chip8-V1) :to-equal #x20)
@@ -383,7 +440,33 @@
       (chip8-load-instructions #xFA1E)
       (chip8-step)
       (expect (aref chip8-regs chip8-I) :not :to-equal #x800)
-      (expect (aref chip8-regs chip8-I) :to-equal #x810)))
+      (expect (aref chip8-regs chip8-I) :to-equal #x810))
+
+    (it "should handle overflow by wrapping around"
+      (aset chip8-regs chip8-I #xFF0)
+      (aset chip8-regs chip8-VA #x10)
+      (chip8-load-instructions #xFA1E)
+      (chip8-step)
+      (expect (aref chip8-regs chip8-I) :not :to-equal #xFF0)
+      (expect (aref chip8-regs chip8-I) :to-equal #x000))
+
+    (it "should set the overflow flag to 0 when there's no overflow"
+      (aset chip8-regs chip8-I #x800)
+      (aset chip8-regs chip8-VA #x10)
+      (aset chip8-regs chip8-VF #xFF)
+      (chip8-load-instructions #xFA1E)
+      (chip8-step)
+      (expect (aref chip8-regs chip8-VF) :not :to-equal #xFF)
+      (expect (aref chip8-regs chip8-VF) :to-equal #x00))
+
+    (it "should set the overflow flag to 1 when there's an overflow"
+      (aset chip8-regs chip8-I #xFF0)
+      (aset chip8-regs chip8-VA #x10)
+      (aset chip8-regs chip8-VF #xFF)
+      (chip8-load-instructions #xFA1E)
+      (chip8-step)
+      (expect (aref chip8-regs chip8-VF) :not :to-equal #xFF)
+      (expect (aref chip8-regs chip8-VF) :to-equal #x01)))
 
   (describe "SUB Vx, Vy"
     (it "should store the difference between both registers"
