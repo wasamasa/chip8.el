@@ -197,9 +197,17 @@ followed by a to f."
       (setq chip8-state 'playing)
       (message "playing!")))))
 
+(defun chip8-init-timer ()
+  (when chip8-timer
+    (cancel-timer chip8-timer)
+    (setq chip8-timer nil))
+  (when (not chip8-timer)
+    (setq chip8-timer (run-with-timer 0 chip8-timer-interval 'chip8-cycle))))
+
 (defun chip8-init ()
   (random t)
   (chip8-init-keys)
+  (chip8-init-timer)
   (fillarray chip8-key-state 0)
   (fillarray chip8-regs 0)
   (aset chip8-regs chip8-PC chip8-program-start)
@@ -483,8 +491,6 @@ followed by a to f."
       (setq chip8-fb-dirty nil))))
 
 (defun chip8-play ()
-  (when (not chip8-timer)
-    (setq chip8-timer (run-with-timer 0 chip8-timer-interval 'chip8-cycle)))
   (setq chip8-state 'playing)
   (message "playing!"))
 
