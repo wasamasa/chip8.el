@@ -6,8 +6,9 @@ chip8.el
 About
 -----
 
-An emulator for the `CHIP-8 <https://en.wikipedia.org/wiki/CHIP-8>`_
-VM, a target for many classic games.
+An emulator for the `(Super) CHIP-8
+<https://en.wikipedia.org/wiki/CHIP-8>`_ VM, a target for many classic
+games.
 
 Installation
 ------------

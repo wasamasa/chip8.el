@@ -27,13 +27,13 @@
 
 ;;; Commentary:
 
-;; This is an emulator for the CHIP-8 VM which is capable of playing
-;; plenty of classic games on modest machines, such as the infinitely
-;; customizable text editor.  Use M-x chip8-emulate and select a ROM
-;; file to be played.  You may want to customize `chip8-keys' (to
-;; select a keymap fitting your keyboard), `chip8-key-timeout' (in
-;; case key repeat doesn't feel right) and `chip8-speed-factor' (to
-;; increase the speed for slow ROMs).
+;; This is an emulator for the (Super) CHIP-8 VM which is capable of
+;; playing plenty of classic games on modest machines, such as the
+;; infinitely customizable text editor.  Use M-x chip8-emulate and
+;; select a ROM file to be played.  You may want to customize
+;; `chip8-keys' (to select a keymap fitting your keyboard),
+;; `chip8-key-timeout' (in case key repeat doesn't feel right) and
+;; `chip8-speed-factor' (to increase the speed for slow ROMs).
 
 ;;; Code:
 
@@ -72,13 +72,20 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
           ))
 (defvar chip8-ram (make-vector #xFFF 0))
 (defvar chip8-stack (make-vector 32 0))
+(defvar chip8-RPL-flags (make-vector 16 0))
 
 (defconst chip8-fb-width 64)
 (defconst chip8-fb-height 32)
 (defconst chip8-fb-size (* chip8-fb-height chip8-fb-width))
 
+(defconst chip8-xfb-width 128)
+(defconst chip8-xfb-height 64)
+(defconst chip8-xfb-size (* chip8-xfb-height chip8-xfb-width))
+
 (defvar chip8-fb (make-vector chip8-fb-size 0))
 (defvar chip8-old-fb (make-vector chip8-fb-size -1))
+(defvar chip8-xfb (make-vector chip8-xfb-size 0))
+(defvar chip8-old-xfb (make-vector chip8-xfb-size -1))
 (defvar chip8-fb-dirty nil)
 
 (defconst chip8-sprites
@@ -98,9 +105,26 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
           #xE0 #x90 #x90 #x90 #xE0 ; D
           #xF0 #x80 #xF0 #x80 #xF0 ; E
           #xF0 #x80 #xF0 #x80 #x80 ; F
+          #XFF #XFF #XC3 #XC3 #XC3 #XC3 #XC3 #XC3 #XFF #XFF ; 0
+          #X0C #X0C #X3C #X3C #X0C #X0C #X0C #X0C #X3F #X3F ; 1
+          #XFF #XFF #X03 #X03 #XFF #XFF #XC0 #XC0 #XFF #XFF ; 2
+          #XFF #XFF #X03 #X03 #XFF #XFF #X03 #X03 #XFF #XFF ; 3
+          #XC3 #XC3 #XC3 #XC3 #XFF #XFF #X03 #X03 #X03 #X03 ; 4
+          #XFF #XFF #XC0 #XC0 #XFF #XFF #X03 #X03 #XFF #XFF ; 5
+          #XFF #XFF #XC0 #XC0 #XFF #XFF #XC3 #XC3 #XFF #XFF ; 6
+          #XFF #XFF #X03 #X03 #X0C #X0C #X30 #X30 #X30 #X30 ; 7
+          #XFF #XFF #XC3 #XC3 #XFF #XFF #XC3 #XC3 #XFF #XFF ; 8
+          #XFF #XFF #XC3 #XC3 #XFF #XFF #X03 #X03 #XFF #XFF ; 9
+          #XFF #XFF #XC3 #XC3 #XFF #XFF #XC3 #XC3 #XC3 #XC3 ; A
+          #XFC #XFC #XC3 #XC3 #XFC #XFC #XC3 #XC3 #XFC #XFC ; B
+          #XFF #XFF #XC0 #XC0 #XC0 #XC0 #XC0 #XC0 #XFF #XFF ; C
+          #XFC #XFC #XC3 #XC3 #XC3 #XC3 #XC3 #XC3 #XFC #XFC ; D
+          #XFF #XFF #XC0 #XC0 #XFF #XFF #XC0 #XC0 #XFF #XFF ; E
+          #XFF #XFF #XC0 #XC0 #XFF #XFF #XC0 #XC0 #XC0 #XC0 ; F
    ))
 
 (defvar chip8-state nil)
+(defvar chip8-extended-p nil)
 (defvar chip8-state-pending-reg nil)
 (defvar chip8-key-state (make-vector 16 0))
 
@@ -214,8 +238,11 @@ followed by a to f."
   (fillarray chip8-ram 0)
   (chip8-load-sprites)
   (fillarray chip8-stack 0)
+  (fillarray chip8-RPL-flags 0)
   (fillarray chip8-fb 0)
-  (fillarray chip8-old-fb -1))
+  (fillarray chip8-old-fb -1)
+  (fillarray chip8-xfb 0)
+  (fillarray chip8-old-xfb -1))
 
 (defun chip8-load-rom (path)
   (with-temp-buffer
@@ -250,15 +277,80 @@ followed by a to f."
     (cond
      ((= type #x0)
       (cond
+       ((and (= x #x0) (= y #xC))
+        (chip8-log "SCD %02X" n)
+        (let* ((height (if chip8-extended-p chip8-xfb-height chip8-fb-height))
+               (width (if chip8-extended-p chip8-xfb-width chip8-fb-width))
+               (fb (if chip8-extended-p chip8-xfb chip8-fb))
+               (step (if chip8-extended-p n (max (/ n 2) 1)))
+               (offset (* width step)))
+          (dotimes (row height)
+            (dotimes (col width)
+              (let ((i (+ (* (- height row 1) width) col)))
+                (if (< row (- height step))
+                    (aset fb i (aref fb (- i offset)))
+                  (aset fb i 0))))))
+        (setq chip8-fb-dirty t))
        ((= instruction #x00E0)
         (chip8-log "CLS")
-        (fillarray chip8-fb 0)
+        (let ((fb (if chip8-extended-p chip8-xfb chip8-fb))
+              (old-fb (if chip8-extended-p chip8-old-xfb chip8-old-fb)))
+          (fillarray fb 0)
+          (fillarray old-fb -1))
+        (chip8-clear-fb)
         (chip8-redraw-fb))
        ((= instruction #x00EE)
         (chip8-log "RET")
         (aset chip8-regs chip8-SP (1- (aref chip8-regs chip8-SP)))
         (aset chip8-regs chip8-PC
               (aref chip8-stack (aref chip8-regs chip8-SP))))
+       ((= instruction #x00FB)
+        (chip8-log "SCR")
+        (let ((height (if chip8-extended-p chip8-xfb-height chip8-fb-height))
+              (width (if chip8-extended-p chip8-xfb-width chip8-fb-width))
+              (fb (if chip8-extended-p chip8-xfb chip8-fb))
+              (step (if chip8-extended-p 4 2)))
+          (dotimes (row height)
+            (dotimes (col width)
+              (let ((i (+ (* row width) (- width col 1))))
+                (if (< col (- width step))
+                    (aset fb i (aref fb (- i step)))
+                  (aset fb i 0))))))
+        (setq chip8-fb-dirty t))
+       ((= instruction #x00FC)
+        (chip8-log "SCL")
+        (let ((height (if chip8-extended-p chip8-xfb-height chip8-fb-height))
+              (width (if chip8-extended-p chip8-xfb-width chip8-fb-width))
+              (fb (if chip8-extended-p chip8-xfb chip8-fb))
+              (step (if chip8-extended-p 4 2)))
+          (dotimes (row height)
+            (dotimes (col width)
+              (let ((i (+ (* row width) col)))
+                (if (< col (- width step))
+                    (aset fb i (aref fb (+ i step)))
+                  (aset fb i 0))))))
+        (setq chip8-fb-dirty t))
+       ((= instruction #x00FD)
+        (chip8-log "HLT")
+        (setq chip8-state 'stopped)
+        (when chip8-timer
+          (cancel-timer chip8-timer)
+          (setq chip8-timer nil))
+        (message "interpreter halted"))
+       ((= instruction #x00FE)
+        (chip8-log "EXT 0")
+        (setq chip8-extended-p nil)
+        (fillarray chip8-fb 0)
+        (fillarray chip8-old-fb -1)
+        (chip8-clear-fb)
+        (chip8-redraw-fb))
+       ((= instruction #x00FF)
+        (chip8-log "EXT 1")
+        (setq chip8-extended-p t)
+        (fillarray chip8-xfb 0)
+        (fillarray chip8-old-xfb -1)
+        (chip8-clear-fb)
+        (chip8-redraw-fb))
        (t
         (chip8-log "SYS 0x%03X" nnn))))
      ((= type #x1)
@@ -361,24 +453,29 @@ followed by a to f."
         (chip8-log "RND V%X, 0x%02X" x kk)
         (aset chip8-regs x (logand rnd kk))))
      ((= type #xD)
-      (let ((col (aref chip8-regs x))
+      (let ((height (if chip8-extended-p chip8-xfb-height chip8-fb-height))
+            (width (if chip8-extended-p chip8-xfb-width chip8-fb-width))
+            (fb (if chip8-extended-p chip8-xfb chip8-fb))
+            (col (aref chip8-regs x))
             (row (aref chip8-regs y))
             (I (aref chip8-regs chip8-I))
+            (extendedp (and chip8-extended-p (zerop n)))
             collisionp)
         (chip8-log "DRW V%X, V%X, %X" x y n)
+        (when extendedp
+          (setq n 16))
         (dotimes (row-offset n)
           (let ((byte (aref chip8-ram (+ I row-offset))))
-            (dotimes (col-offset 8)
+            (dotimes (col-offset (if extendedp 16 8))
               (let ((r (+ row row-offset))
                     (c (+ col col-offset)))
-                (when (and (< r chip8-fb-height) (< c chip8-fb-width))
+                (when (and (< r height) (< c width))
                   (let ((power (ash 1 (- 7 col-offset)))
-                        (idx (+ (* chip8-fb-width r) c)))
+                        (idx (+ (* width r) c)))
                     (when (= (logand byte power) power)
-                      (when (= (aref chip8-fb idx) 1)
+                      (when (= (aref fb idx) 1)
                         (setq collisionp t))
-                      (aset chip8-fb idx
-                            (logxor (aref chip8-fb idx) 1)))))))))
+                      (aset fb idx (logxor (aref fb idx) 1)))))))))
         (aset chip8-regs chip8-VF (if collisionp 1 0))
         (setq chip8-fb-dirty t)))
      ((= type #xE)
@@ -417,13 +514,19 @@ followed by a to f."
         (when (> (aref chip8-regs chip8-ST) 0)
           (funcall chip8-beep-start-function)))
        ((= kk #x1E)
-        (let ((I (aref chip8-regs chip8-I)))
+        (let* ((I (aref chip8-regs chip8-I))
+               (ret (+ I (aref chip8-regs x))))
           (chip8-log "ADD I, V%X" x)
-          (aset chip8-regs chip8-I (logand (+ I (aref chip8-regs x)) #xFFF))))
+          (aset chip8-regs chip8-I (logand ret #xFFF))
+          (aset chip8-regs chip8-VF (if (> ret #xFFF) 1 0))))
        ((= kk #x29)
         (let ((n (aref chip8-regs x)))
           (chip8-log "LD F, V%X" x)
           (aset chip8-regs chip8-I (* n 5))))
+       ((= kk #x30)
+        (let ((n (aref chip8-regs x)))
+          (chip8-log "LD FF, V%X" x)
+          (aset chip8-regs chip8-I (+ (* n 10) 80))))
        ((= kk #x33)
         (let ((n (aref chip8-regs x))
               (I (aref chip8-regs chip8-I)))
@@ -439,6 +542,12 @@ followed by a to f."
         (let ((I (aref chip8-regs chip8-I)))
           (chip8-log "LD V%X, [I]" x)
           (chip8--memcpy chip8-regs 0 chip8-ram I (1+ x))))
+       ((= kk #x75)
+        (chip8-log "LD [RPL], V%X" x)
+        (chip8--memcpy chip8-RPL-flags 0 chip8-regs 0 (1+ x)))
+       ((= kk #x85)
+        (chip8-log "LD V%X, [RPL]" x)
+        (chip8--memcpy chip8-regs 0 chip8-RPL-flags 0 (1+ x)))
        (t
         (error "unknown instruction: %04X" instruction))))
      (t
@@ -446,30 +555,39 @@ followed by a to f."
 
 (defun chip8-clear-fb ()
   (with-current-buffer (get-buffer-create chip8-buffer)
-    (let ((buffer-read-only nil))
+    (let ((height (if chip8-extended-p chip8-xfb-height chip8-fb-height))
+          (width (if chip8-extended-p chip8-xfb-width chip8-fb-width))
+          (buffer-read-only nil))
       (erase-buffer)
-      (dotimes (_ chip8-fb-height)
-        (dotimes (_ chip8-fb-width)
+      (dotimes (_ height)
+        (dotimes (_ width)
           (insert chip8-black-pixel))
         (insert "\n")))))
 
 (defun chip8-draw-fb ()
   (with-current-buffer (get-buffer-create chip8-buffer)
-    (let ((buffer-read-only nil))
+    (let ((height (if chip8-extended-p chip8-xfb-height chip8-fb-height))
+          (width (if chip8-extended-p chip8-xfb-width chip8-fb-width))
+          (fb (if chip8-extended-p chip8-xfb chip8-fb))
+          (old-fb (if chip8-extended-p chip8-old-xfb chip8-old-fb))
+          (buffer-read-only nil))
       (goto-char (point-min))
-      (dotimes (row chip8-fb-height)
-        (dotimes (col chip8-fb-width)
-          (let* ((idx (+ (* row chip8-fb-width) col))
-                 (pixel (aref chip8-fb idx)))
-            (if (= pixel (aref chip8-old-fb idx))
-                (forward-char 2)
-              (delete-char 2)
-              (insert (if (zerop pixel) chip8-black-pixel chip8-white-pixel)))))
+      (dotimes (row height)
+        (dotimes (col width)
+          (let* ((idx (+ (* row width) col))
+                 (pixel (aref fb idx)))
+            (when (/= pixel (aref old-fb idx))
+              (let ((face (if (zerop pixel) 'chip8-black 'chip8-white)))
+                (put-text-property (point) (+ (point) 2) 'face face))))
+          (forward-char 2))
         (forward-char 1)))))
 
 (defun chip8-redraw-fb ()
   (chip8-draw-fb)
-  (chip8--memcpy chip8-old-fb 0 chip8-fb 0 chip8-fb-size))
+  (let ((old-fb (if chip8-extended-p chip8-xfb chip8-fb))
+        (fb (if chip8-extended-p chip8-xfb chip8-fb))
+        (size (if chip8-extended-p chip8-xfb-size chip8-fb-size)))
+    (chip8--memcpy old-fb 0 fb 0 size)))
 
 (defun chip8-cycle ()
   ;; HACK: `chip8-step' may change `chip8-state' when waiting for user
