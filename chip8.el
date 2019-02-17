@@ -76,9 +76,15 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
 (defconst chip8-fb-width 64)
 (defconst chip8-fb-height 32)
 (defconst chip8-fb-size (* chip8-fb-height chip8-fb-width))
+(defconst chip8-fb-scale 8)
+(defconst chip8-fb-scaled-width (* chip8-fb-width chip8-fb-scale))
+(defconst chip8-fb-scaled-height (* chip8-fb-height chip8-fb-scale))
+(defconst chip8-bv-size (* chip8-fb-scaled-height chip8-fb-scaled-width))
 
-(defvar chip8-fb (make-vector chip8-fb-size 0))
-(defvar chip8-old-fb (make-vector chip8-fb-size -1))
+(defvar chip8-fb (make-vector chip8-fb-size nil))
+(defvar chip8-old-fb (make-vector chip8-fb-size t))
+(defvar chip8-bv (make-bool-vector chip8-bv-size nil))
+(defvar chip8-image-spec nil)
 (defvar chip8-fb-dirty nil)
 
 (defconst chip8-sprites
@@ -129,17 +135,6 @@ followed by a to f."
 (defconst chip8-timer-interval (/ 1.0 60))
 (defvar chip8-timer nil)
 (defvar chip8-current-rom-path nil)
-
-(defface chip8-black
-  '((t (:foreground "white" :background "black")))
-  "Face for black pixels")
-
-(defface chip8-white
-  '((t (:foreground "black" :background "white")))
-  "Face for white pixels")
-
-(defconst chip8-black-pixel (propertize "  " 'face 'chip8-black))
-(defconst chip8-white-pixel (propertize "  " 'face 'chip8-white))
 
 (defcustom chip8-beep-start-function (lambda () (message "beep"))
   "Function called when the emulator starts beeping."
@@ -214,8 +209,10 @@ followed by a to f."
   (fillarray chip8-ram 0)
   (chip8-load-sprites)
   (fillarray chip8-stack 0)
-  (fillarray chip8-fb 0)
-  (fillarray chip8-old-fb -1))
+  (fillarray chip8-fb nil)
+  (fillarray chip8-old-fb t)
+  (fillarray chip8-bv nil)
+  (setq chip8-image-spec (chip8-make-image-spec)))
 
 (defun chip8-load-rom (path)
   (with-temp-buffer
@@ -252,7 +249,7 @@ followed by a to f."
       (cond
        ((= instruction #x00E0)
         (chip8-log "CLS")
-        (fillarray chip8-fb 0)
+        (fillarray chip8-fb nil)
         (chip8-redraw-fb))
        ((= instruction #x00EE)
         (chip8-log "RET")
@@ -375,10 +372,9 @@ followed by a to f."
                   (let ((power (ash 1 (- 7 col-offset)))
                         (idx (+ (* chip8-fb-width r) c)))
                     (when (= (logand byte power) power)
-                      (when (= (aref chip8-fb idx) 1)
+                      (when (aref chip8-fb idx)
                         (setq collisionp t))
-                      (aset chip8-fb idx
-                            (logxor (aref chip8-fb idx) 1)))))))))
+                      (aset chip8-fb idx (not (aref chip8-fb idx))))))))))
         (aset chip8-regs chip8-VF (if collisionp 1 0))
         (setq chip8-fb-dirty t)))
      ((= type #xE)
@@ -444,32 +440,38 @@ followed by a to f."
      (t
       (error "unknown instruction: %04X" instruction)))))
 
+(defun chip8-make-image-spec ()
+  `(image :type xbm
+          :data ,chip8-bv
+          :width ,chip8-fb-scaled-width
+          :height ,chip8-fb-scaled-height
+          :foreground "white"
+          :background "black"))
+
 (defun chip8-clear-fb ()
   (with-current-buffer (get-buffer-create chip8-buffer)
     (let ((buffer-read-only nil))
       (erase-buffer)
-      (dotimes (_ chip8-fb-height)
-        (dotimes (_ chip8-fb-width)
-          (insert chip8-black-pixel))
-        (insert "\n")))))
+      (insert (propertize " " 'display chip8-image-spec) "\n"))))
 
 (defun chip8-draw-fb ()
-  (with-current-buffer (get-buffer-create chip8-buffer)
-    (let ((buffer-read-only nil))
-      (goto-char (point-min))
-      (dotimes (row chip8-fb-height)
-        (dotimes (col chip8-fb-width)
-          (let* ((idx (+ (* row chip8-fb-width) col))
-                 (pixel (aref chip8-fb idx)))
-            (if (= pixel (aref chip8-old-fb idx))
-                (forward-char 2)
-              (delete-char 2)
-              (insert (if (zerop pixel) chip8-black-pixel chip8-white-pixel)))))
-        (forward-char 1)))))
+  (let ((changed-pixels 0))
+    (dotimes (row chip8-fb-scaled-height)
+      (dotimes (col chip8-fb-scaled-width)
+        (let ((fb-idx (+ (* (/ row chip8-fb-scale) chip8-fb-width)
+                         (/ col chip8-fb-scale)))
+              (bv-idx (+ (* row chip8-fb-scaled-width) col)))
+          (when (not (equal (aref chip8-fb fb-idx) (aref chip8-old-fb fb-idx)))
+            (setq changed-pixels (1+ changed-pixels))
+            (aset chip8-bv bv-idx (aref chip8-fb fb-idx)))))))
+  (force-window-update chip8-buffer))
 
 (defun chip8-redraw-fb ()
   (chip8-draw-fb)
+  (image-flush chip8-image-spec)
   (chip8--memcpy chip8-old-fb 0 chip8-fb 0 chip8-fb-size))
+
+(defvar chip8-skip-redraw nil)
 
 (defun chip8-cycle ()
   ;; HACK: `chip8-step' may change `chip8-state' when waiting for user
@@ -487,8 +489,10 @@ followed by a to f."
         (when (zerop (aref chip8-regs chip8-ST))
           (funcall chip8-beep-stop-function))))
     (when chip8-fb-dirty
+      (chip8-log "Redrawing FB")
       (chip8-redraw-fb)
-      (setq chip8-fb-dirty nil))))
+      (setq chip8-fb-dirty nil))
+    (setq chip8-skip-redraw (not chip8-skip-redraw))))
 
 (defun chip8-play ()
   (setq chip8-state 'playing)
