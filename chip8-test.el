@@ -27,13 +27,13 @@
       (chip8-step)
       (expect 'chip8-redraw-fb :to-have-been-called)))
 
-  (describe "HLT"
+  (describe "EXIT"
     (it "should stop the emulator"
       (chip8-load-instructions #x00FD)
       (expect (chip8-step) :not :to-throw)
       (expect chip8-state :to-equal 'stopped)))
 
-  (describe "EXT 0"
+  (describe "LOW"
     (it "should exit extended mode"
       (spy-on 'chip8-clear-fb)
       (spy-on 'chip8-redraw-fb)
@@ -42,7 +42,7 @@
       (expect chip8-extended-p :to-equal nil)
       (expect 'chip8-redraw-fb :to-have-been-called)))
 
-  (describe "EXT 1"
+  (describe "HIGH"
     (it "should enter extended mode"
       (spy-on 'chip8-clear-fb)
       (spy-on 'chip8-redraw-fb)
@@ -319,7 +319,7 @@
       (chip8-step)
       (expect (aref chip8-regs chip8-I) :not :to-equal #x999)))
 
-  (describe "LD FF, Vx"
+  (describe "LD HF, Vx"
     (it "should set the I register to the sprite address in the register"
       (aset chip8-regs chip8-I #x999)
       (aset chip8-regs chip8-V2 #xF)
@@ -379,7 +379,7 @@
       (expect (aref chip8-regs chip8-V1) :to-equal #x20)
       (expect (aref chip8-regs chip8-V2) :to-equal #x30)))
 
-  (describe "LD [RPL], Vx"
+  (describe "LD R, Vx"
     (it "should store up to the specified register into the RPL registers"
       (aset chip8-regs chip8-V0 #x10)
       (aset chip8-regs chip8-V1 #x20)
@@ -390,7 +390,7 @@
       (expect (aref chip8-RPL-flags 1) :to-equal #x20)
       (expect (aref chip8-RPL-flags 2) :to-equal #x30)))
 
-  (describe "LD Vx, [RPL]"
+  (describe "LD Vx, R"
     (it "should load up to the specified register from the RPL registers"
       (aset chip8-RPL-flags 0 #x10)
       (aset chip8-RPL-flags 1 #x20)
