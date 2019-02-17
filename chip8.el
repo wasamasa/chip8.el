@@ -107,7 +107,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
 (defconst chip8-keys-hex "0123456789abcdef")
 (defconst chip8-keys-qwerty "x123qweasdzc4rfv")
 (defconst chip8-keys-qwertz "x123qweasdyc4rfv")
-(defconst chip8-keys-azerty "x123qweasdyc4rfv")
+(defconst chip8-keys-azerty "x123azeqsdwc4rfv")
 
 (defcustom chip8-keys chip8-keys-qwerty
   "Sequence to use for hexadecimal CHIP-8 keypad.
