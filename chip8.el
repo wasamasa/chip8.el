@@ -86,7 +86,7 @@ As the timer runs at 60hz, factor 1 corresponds to 60 cps, factor
 (defvar chip8-old-fb (make-vector chip8-fb-size -1))
 (defvar chip8-xfb (make-vector chip8-xfb-size 0))
 (defvar chip8-old-xfb (make-vector chip8-xfb-size -1))
-(defvar chip8-fb-dirty nil)
+(defvar chip8-fb-dirty-p nil)
 
 (defconst chip8-sprites
   (vector #xF0 #x90 #x90 #x90 #xF0 ; 0
@@ -290,7 +290,7 @@ followed by a to f."
                 (if (< row (- height step))
                     (aset fb i (aref fb (- i offset)))
                   (aset fb i 0))))))
-        (setq chip8-fb-dirty t))
+        (setq chip8-fb-dirty-p t))
        ((= instruction #x00E0)
         (chip8-log "CLS")
         (let ((fb (if chip8-extended-p chip8-xfb chip8-fb))
@@ -316,7 +316,7 @@ followed by a to f."
                 (if (< col (- width step))
                     (aset fb i (aref fb (- i step)))
                   (aset fb i 0))))))
-        (setq chip8-fb-dirty t))
+        (setq chip8-fb-dirty-p t))
        ((= instruction #x00FC)
         (chip8-log "SCL")
         (let ((height (if chip8-extended-p chip8-xfb-height chip8-fb-height))
@@ -329,7 +329,7 @@ followed by a to f."
                 (if (< col (- width step))
                     (aset fb i (aref fb (+ i step)))
                   (aset fb i 0))))))
-        (setq chip8-fb-dirty t))
+        (setq chip8-fb-dirty-p t))
        ((= instruction #x00FD)
         (chip8-log "EXIT")
         (setq chip8-state 'stopped)
@@ -477,7 +477,7 @@ followed by a to f."
                         (setq collisionp t))
                       (aset fb idx (logxor (aref fb idx) 1)))))))))
         (aset chip8-regs chip8-VF (if collisionp 1 0))
-        (setq chip8-fb-dirty t)))
+        (setq chip8-fb-dirty-p t)))
      ((= type #xE)
       (let ((key (aref chip8-regs x)))
         (cond
@@ -604,9 +604,9 @@ followed by a to f."
         (aset chip8-regs chip8-ST (1- ST))
         (when (zerop (aref chip8-regs chip8-ST))
           (funcall chip8-beep-stop-function))))
-    (when chip8-fb-dirty
+    (when chip8-fb-dirty-p
       (chip8-redraw-fb)
-      (setq chip8-fb-dirty nil))))
+      (setq chip8-fb-dirty-p nil))))
 
 (defun chip8-play ()
   (setq chip8-state 'playing)
